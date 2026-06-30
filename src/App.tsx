@@ -1589,7 +1589,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
               data-lenis-prevent
               className="w-full h-full pointer-events-auto overflow-y-auto pt-32 pb-12 px-6 md:px-12 custom-scrollbar"
             >
-              <div className="max-w-4xl mx-auto w-full">
+              <div className="max-w-4xl w-full">
                 {/* Header aligned with PriceListModal */}
                 <div className="mb-16 border-b border-white/10 pb-12">
                   <motion.div 
