@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: contact_requests
+    // Document ID: {requestId}
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - email: string (required, valid email format)
+    //   - projectType: string (required)
+    //   - budget: string (required)
+    //   - message: string (required, 1-2000 chars)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: projects
+    // Document ID: {projectId}
+    // Fields:
+    //   - title: string
+    //   - category: string
+    //   - image: string
+    //   - link: string
+    //   - order: number
+    //   - updatedAt: timestamp (optional)
+    //
+    // Collection: dribbble_projects
+    // Document ID: {projectId}
+    // Fields:
+    //   - title: string
+    //   - category: string
+    //   - image: string
+    //   - link: string
+    //   - order: number
+    //   - updatedAt: timestamp (optional)
+    //
+    // Collection: shop_products
+    // Document ID: {productId}
+    // Fields:
+    //   - title: string
+    //   - description: string
+    //   - price: string
+    //   - image: string
+    //   - link: string
+    //   - order: number
+    //   - updatedAt: timestamp (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidContactRequest(data) {
+      return data.keys().hasOnly(['name', 'email', 'projectType', 'budget', 'message', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             isValidEmail(data.email) &&
+             data.projectType is string && data.projectType.size() > 0 && data.projectType.size() <= 100 &&
+             data.budget is string && data.budget.size() > 0 && data.budget.size() <= 100 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 2000 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['title', 'category', 'image', 'link', 'order']) &&
+             data.keys().hasOnly(['title', 'category', 'image', 'link', 'order', 'updatedAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.image is string && data.image.size() > 0 && data.image.size() <= 1000000 &&
+             data.link is string && data.link.size() > 0 && data.link.size() <= 2000 &&
+             data.order is number &&
+             (!('updatedAt' in data) || data.updatedAt == request.time);
+    }
+
+    function isValidShopProduct(data) {
+      return data.keys().hasAll(['title', 'description', 'price', 'image', 'link', 'order']) &&
+             data.keys().hasOnly(['title', 'description', 'price', 'image', 'link', 'order', 'updatedAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.description is string && data.description.size() > 0 && data.description.size() <= 2000 &&
+             data.price is string && data.price.size() > 0 && data.price.size() <= 100 &&
+             data.image is string && data.image.size() > 0 && data.image.size() <= 1000000 &&
+             data.link is string && data.link.size() > 0 && data.link.size() <= 2000 &&
+             data.order is number &&
+             (!('updatedAt' in data) || data.updatedAt == request.time);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    match /contact_requests/{requestId} {
+      // Direct client creation is fully disabled (must go through server API /api/contact)
+      allow create: if false;
+      
+      // Only admins can read or manage contact requests
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      // Anyone can read projects
+      allow read: if true;
+      // Only admins can manage projects
+      allow create, update: if isAdmin() && isValidProject(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /dribbble_projects/{projectId} {
+      // Anyone can read dribbble projects
+      allow read: if true;
+      // Only admins can manage dribbble projects
+      allow create, update: if isAdmin() && isValidProject(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /shop_products/{productId} {
+      // Anyone can read shop products
+      allow read: if true;
+      // Only admins can manage shop products
+      allow create, update: if isAdmin() && isValidShopProduct(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow create, update: if isAuthenticated() && request.auth.uid == userId && 
+                           request.resource.data.role == 'client';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "marselspace@gmail.com" && request.auth.token.email_verified == true));
+    }
+  }
+}
