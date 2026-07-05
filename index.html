@@ -2,6 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        var muteScriptError = function(msg) {
+          if (!msg) return false;
+          var lower = msg.toLowerCase();
+          return lower.includes('script error') || lower.includes('cross-origin') || lower.includes('cross origin');
+        };
+
+        window.addEventListener('error', function(event) {
+          if (event && (muteScriptError(event.message) || (event.error && muteScriptError(event.error.message)))) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event && event.reason) {
+            var reasonStr = event.reason instanceof Error ? event.reason.message : String(event.reason);
+            if (muteScriptError(reasonStr)) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }
+        }, true);
+
+        var originalOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+          var msgStr = typeof message === 'string' ? message : (message && message.message);
+          if (muteScriptError(msgStr)) {
+            console.warn("Intercepted and muted cross-origin script error early in head:", message);
+            return true;
+          }
+          if (originalOnError) {
+            return originalOnError.apply(this, arguments);
+          }
+          return false;
+        };
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/logo/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hello, Marsel</title>
@@ -9,6 +48,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx" crossorigin></script>
   </body>
 </html>

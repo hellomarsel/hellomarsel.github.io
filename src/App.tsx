@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, Component, ErrorInfo, ReactNode, memo, useRef } from 'react';
+import { useForm } from "@formspree/react";
 import { motion, AnimatePresence, Variants, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { ArrowUpRight, Globe, Menu, X as CloseIcon, ChevronDown, ChevronUp, Mail, AlertCircle, Plus, Trash2, Save, LogOut, Upload } from 'lucide-react';
 import Lenis from '@studio-freight/lenis';
@@ -1446,6 +1447,7 @@ const CustomSelect = ({ label, options, value, onChange }: { label: string; opti
 
 // Contact Modal Component
 const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen: boolean; onClose: () => void; content: ContactModalContent; lang: Language; setLang: (l: Language) => void }) => {
+  const [state, formspreeHandleSubmit] = useForm('xjgqlegb');
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [honeypot, setHoneypot] = useState('');
   const [formData, setFormData] = useState({
@@ -1482,7 +1484,29 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (state.succeeded) {
+      setStatus('success');
+      const timer = setTimeout(() => {
+        onClose();
+        setStatus('idle');
+        setFormData({
+          name: '',
+          email: '',
+          projectType: content.projectTypes[0],
+          budget: content.budgetOptions[0],
+          message: ''
+        });
+      }, 5000);
+      return () => clearTimeout(timer);
+    } else if (state.submitting) {
+      setStatus('sending');
+    } else if (state.errors) {
+      setStatus('error');
+    }
+  }, [state.succeeded, state.submitting, state.errors, onClose, content.projectTypes, content.budgetOptions]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     // Honeypot check
@@ -1496,45 +1520,8 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
       return;
     }
 
-    setStatus('sending');
-    
-    try {
-      console.log("Sending contact request via /api/contact...");
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          message: formData.message,
-          company: formData.projectType,
-          service: formData.budget,
-          honeypot: honeypot
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send message.");
-      }
-
-      console.log("Contact request sent successfully.");
-      setStatus('success');
-      setTimeout(() => {
-        onClose();
-        setStatus('idle');
-        setFormData({
-          name: '',
-          email: '',
-          projectType: content.projectTypes[0],
-          budget: content.budgetOptions[0],
-          message: ''
-        });
-      }, 5000); // 5 seconds for success message
-    } catch (error) {
-      console.error("Error submitting contact form:", error);
-      setStatus('error');
-    }
+    // Pass event to Formspree
+    await formspreeHandleSubmit(e);
   };
 
   return (
@@ -1589,7 +1576,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
               data-lenis-prevent
               className="w-full h-full pointer-events-auto overflow-y-auto pt-32 pb-12 px-6 md:px-12 custom-scrollbar"
             >
-              <div className="max-w-4xl w-full">
+              <div className="max-w-3xl w-full">
                 {/* Header aligned with PriceListModal */}
                 <div className="mb-16 border-b border-white/10 pb-12">
                   <motion.div 
@@ -1630,6 +1617,8 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
                   </motion.div>
                 ) : (
                   <form onSubmit={handleSubmit} className="flex flex-col gap-2 max-w-3xl">
+                    <input type="hidden" name="projectType" value={formData.projectType} />
+                    <input type="hidden" name="budget" value={formData.budget} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <label 
                         className="group bg-white/5 backdrop-blur-md border border-white/10 p-6 md:p-8 rounded-none hover:bg-white/10 hover:border-white/20 transition-all duration-500 cursor-text"
@@ -1638,6 +1627,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
                         <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 block mb-2">{content.name}</span>
                         <input 
                           required
+                          name="name"
                           type="text" 
                           value={formData.name}
                           onChange={(e) => setFormData({...formData, name: e.target.value})}
@@ -1652,6 +1642,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
                         <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 block mb-2">{content.email}</span>
                         <input 
                           required
+                          name="email"
                           type="email" 
                           value={formData.email}
                           onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -1684,6 +1675,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
                       <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 block mb-2">{content.message}</span>
                       <textarea 
                         required
+                        name="message"
                         rows={4}
                         value={formData.message}
                         onChange={(e) => setFormData({...formData, message: e.target.value})}
@@ -1697,7 +1689,7 @@ const ContactModal = memo(({ isOpen, onClose, content, lang, setLang }: { isOpen
                     <div className="hidden" aria-hidden="true">
                       <input 
                         type="text" 
-                        name="website" 
+                        name="_gotcha" 
                         tabIndex={-1} 
                         autoComplete="off" 
                         value={honeypot}
@@ -3721,7 +3713,7 @@ export default function App() {
                 viewport={{ once: true, margin: "-100px" }}
                 className="w-full"
               >
-                <div className="mb-8 px-6 md:px-12">
+                <div className="mb-8">
                   <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted">
                     {t.roadmap.title}
                   </h2>

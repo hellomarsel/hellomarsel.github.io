@@ -35,17 +35,6 @@ service cloud.firestore {
     //   - order: number
     //   - updatedAt: timestamp (optional)
     //
-    // Collection: shop_products
-    // Document ID: {productId}
-    // Fields:
-    //   - title: string
-    //   - description: string
-    //   - price: string
-    //   - image: string
-    //   - link: string
-    //   - order: number
-    //   - updatedAt: timestamp (optional)
-    //
     // ===============================================================
 
     // ===============================================================
@@ -56,22 +45,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == "marselspace@gmail.com";
+    }
+
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
+    function isSafeUrl(url) {
+      // Matches http://, https://, or relative paths like /something
+      return url is string && url.matches("^(https?://.*|/.*)$");
     }
 
-    function isValidContactRequest(data) {
-      return data.keys().hasOnly(['name', 'email', 'projectType', 'budget', 'message', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             isValidEmail(data.email) &&
-             data.projectType is string && data.projectType.size() > 0 && data.projectType.size() <= 100 &&
-             data.budget is string && data.budget.size() > 0 && data.budget.size() <= 100 &&
-             data.message is string && data.message.size() > 0 && data.message.size() <= 2000 &&
-             data.createdAt == request.time;
+    function isSafeImageUrl(url) {
+      // Matches http://, https://, data:image/, or relative paths
+      return url is string && url.matches("^(https?://.*|data:image/.*|/.*)$");
     }
 
     function isValidProject(data) {
@@ -80,19 +69,9 @@ service cloud.firestore {
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
              data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
              data.image is string && data.image.size() > 0 && data.image.size() <= 1000000 &&
+             isSafeImageUrl(data.image) &&
              data.link is string && data.link.size() > 0 && data.link.size() <= 2000 &&
-             data.order is number &&
-             (!('updatedAt' in data) || data.updatedAt == request.time);
-    }
-
-    function isValidShopProduct(data) {
-      return data.keys().hasAll(['title', 'description', 'price', 'image', 'link', 'order']) &&
-             data.keys().hasOnly(['title', 'description', 'price', 'image', 'link', 'order', 'updatedAt']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.description is string && data.description.size() > 0 && data.description.size() <= 2000 &&
-             data.price is string && data.price.size() > 0 && data.price.size() <= 100 &&
-             data.image is string && data.image.size() > 0 && data.image.size() <= 1000000 &&
-             data.link is string && data.link.size() > 0 && data.link.size() <= 2000 &&
+             isSafeUrl(data.link) &&
              data.order is number &&
              (!('updatedAt' in data) || data.updatedAt == request.time);
     }
@@ -100,10 +79,6 @@ service cloud.firestore {
     // ===============================================================
     // Rules
     // ===============================================================
-
-    match /test/{docId} {
-      allow read: if true;
-    }
 
     match /contact_requests/{requestId} {
       // Direct client creation is fully disabled (must go through server API /api/contact)
@@ -129,24 +104,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /shop_products/{productId} {
-      // Anyone can read shop products
-      allow read: if true;
-      // Only admins can manage shop products
-      allow create, update: if isAdmin() && isValidShopProduct(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
     match /users/{userId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow create, update: if isAuthenticated() && request.auth.uid == userId && 
-                           request.resource.data.role == 'client';
+                            request.resource.data.role == 'client';
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "marselspace@gmail.com" && request.auth.token.email_verified == true));
+    // Explicit deny-all for any other collections
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
